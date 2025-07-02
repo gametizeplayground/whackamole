@@ -26,63 +26,107 @@ document.addEventListener('DOMContentLoaded', () => {
     const fruits = ['Apple', 'Banana', 'Orange', 'Grape', 'Mango', 'Peach', 'Cherry', 'Lemon', 'Kiwi', 'Pear'];
     const nonFruits = ['Car', 'Book', 'Chair', 'Phone', 'Rock', 'Ball', 'Cup', 'Hat', 'Key', 'Pen'];
 
-    // Sound effects - Mobile optimized audio pool
-    class AudioPool {
-        constructor(src, poolSize = 5) {
+    // Sound effects - Mobile optimized with aggressive throttling
+    class ThrottledAudioPool {
+        constructor(src, poolSize = 3) {
             this.pool = [];
             this.currentIndex = 0;
             this.poolSize = poolSize;
+            this.lastPlayTime = 0;
+            this.minInterval = 50; // Minimum 50ms between same sound type
+            this.playingCount = 0;
+            this.maxSimultaneous = 2; // Max 2 instances playing simultaneously
             
-            // Create pool of audio instances
+            // Create smaller pool for mobile
             for (let i = 0; i < poolSize; i++) {
                 const audio = new Audio(src);
                 audio.preload = 'auto';
-                audio.volume = 0.7; // Slightly lower volume for mobile
+                audio.volume = 0.6; // Lower volume for mobile
+                
+                // Track when audio finishes
+                audio.addEventListener('ended', () => {
+                    this.playingCount = Math.max(0, this.playingCount - 1);
+                });
+                
                 this.pool.push(audio);
             }
         }
         
         play() {
+            const now = Date.now();
+            
+            // Throttle: Don't play if too soon after last play
+            if (now - this.lastPlayTime < this.minInterval) {
+                return;
+            }
+            
+            // Limit simultaneous sounds
+            if (this.playingCount >= this.maxSimultaneous) {
+                return;
+            }
+            
             try {
                 const audio = this.pool[this.currentIndex];
                 
-                // Reset audio to beginning if it's already playing
+                // Stop current audio if playing to avoid overlap
                 if (!audio.paused) {
-                    audio.currentTime = 0;
-                } else {
-                    audio.currentTime = 0;
+                    audio.pause();
+                    this.playingCount = Math.max(0, this.playingCount - 1);
                 }
                 
-                // Play with promise handling for mobile
+                audio.currentTime = 0;
+                
+                // Play with promise handling
                 const playPromise = audio.play();
                 if (playPromise !== undefined) {
-                    playPromise.catch(error => {
-                        // Auto-play was prevented, which is fine
-                        console.log("Audio play prevented:", error);
+                    playPromise.then(() => {
+                        this.playingCount++;
+                    }).catch(() => {
+                        // Audio blocked, ignore
                     });
+                } else {
+                    this.playingCount++;
                 }
                 
-                // Move to next audio instance in pool
+                this.lastPlayTime = now;
                 this.currentIndex = (this.currentIndex + 1) % this.poolSize;
+                
             } catch (error) {
-                console.log("Audio error:", error);
+                // Ignore audio errors on mobile
             }
         }
     }
 
-    // Create audio pools for each sound
-    const soundHitPool = new AudioPool('assets/sound_hit1.ogg', 8);  // More instances for hit sound
-    const soundScorePool = new AudioPool('assets/sound_score.ogg', 5);
-    const soundWrongPool = new AudioPool('assets/sound_wrong.mp3', 5);
+    // Audio throttling system
+    let lastAudioTime = 0;
+    let audioQueue = [];
+    const AUDIO_COOLDOWN = 100; // 100ms cooldown between any sounds
+    
+    // Create smaller, throttled audio pools
+    const soundHitPool = new ThrottledAudioPool('assets/sound_hit1.ogg', 2);
+    const soundScorePool = new ThrottledAudioPool('assets/sound_score.ogg', 2);
+    const soundWrongPool = new ThrottledAudioPool('assets/sound_wrong.mp3', 2);
+
+    function playThrottledSound(soundPool) {
+        const now = Date.now();
+        
+        // Global audio throttling - prevent audio spam
+        if (now - lastAudioTime < AUDIO_COOLDOWN) {
+            return; // Skip this sound to prevent lag
+        }
+        
+        soundPool.play();
+        lastAudioTime = now;
+    }
 
     function playSoundHit() {
-        soundHitPool.play();
+        playThrottledSound(soundHitPool);
     }
     function playSoundScore() {
-        soundScorePool.play();
+        playThrottledSound(soundScorePool);
     }
     function playSoundWrong() {
-        soundWrongPool.play();
+        playThrottledSound(soundWrongPool);
     }
 
     // Enable audio on first user interaction (required for mobile)
