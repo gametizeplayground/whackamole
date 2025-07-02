@@ -119,14 +119,30 @@ document.addEventListener('DOMContentLoaded', () => {
         lastAudioTime = now;
     }
 
+    // Mobile detection
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 768;
+
     function playSoundHit() {
-        playThrottledSound(soundHitPool);
+        if (isMobile) {
+            // Only play hit sound on mobile for essential feedback
+            playThrottledSound(soundHitPool);
+        } else {
+            playThrottledSound(soundHitPool);
+        }
     }
     function playSoundScore() {
-        playThrottledSound(soundScorePool);
+        if (!isMobile) {
+            // Disable score sound on mobile to prevent lag
+            playThrottledSound(soundScorePool);
+        }
+        // Silent on mobile
     }
     function playSoundWrong() {
-        playThrottledSound(soundWrongPool);
+        if (!isMobile) {
+            // Disable wrong sound on mobile to prevent lag
+            playThrottledSound(soundWrongPool);
+        }
+        // Silent on mobile
     }
 
     // Enable audio on first user interaction (required for mobile)
