@@ -26,21 +26,78 @@ document.addEventListener('DOMContentLoaded', () => {
     const fruits = ['Apple', 'Banana', 'Orange', 'Grape', 'Mango', 'Peach', 'Cherry', 'Lemon', 'Kiwi', 'Pear'];
     const nonFruits = ['Car', 'Book', 'Chair', 'Phone', 'Rock', 'Ball', 'Cup', 'Hat', 'Key', 'Pen'];
 
-    // Sound effects
-    const soundHit = new Audio('assets/sound_hit1.ogg');
-    const soundScore = new Audio('assets/sound_score.ogg');
-    const soundWrong = new Audio('assets/sound_wrong.mp3');
+    // Sound effects - Mobile optimized audio pool
+    class AudioPool {
+        constructor(src, poolSize = 5) {
+            this.pool = [];
+            this.currentIndex = 0;
+            this.poolSize = poolSize;
+            
+            // Create pool of audio instances
+            for (let i = 0; i < poolSize; i++) {
+                const audio = new Audio(src);
+                audio.preload = 'auto';
+                audio.volume = 0.7; // Slightly lower volume for mobile
+                this.pool.push(audio);
+            }
+        }
+        
+        play() {
+            try {
+                const audio = this.pool[this.currentIndex];
+                
+                // Reset audio to beginning if it's already playing
+                if (!audio.paused) {
+                    audio.currentTime = 0;
+                } else {
+                    audio.currentTime = 0;
+                }
+                
+                // Play with promise handling for mobile
+                const playPromise = audio.play();
+                if (playPromise !== undefined) {
+                    playPromise.catch(error => {
+                        // Auto-play was prevented, which is fine
+                        console.log("Audio play prevented:", error);
+                    });
+                }
+                
+                // Move to next audio instance in pool
+                this.currentIndex = (this.currentIndex + 1) % this.poolSize;
+            } catch (error) {
+                console.log("Audio error:", error);
+            }
+        }
+    }
+
+    // Create audio pools for each sound
+    const soundHitPool = new AudioPool('assets/sound_hit1.ogg', 8);  // More instances for hit sound
+    const soundScorePool = new AudioPool('assets/sound_score.ogg', 5);
+    const soundWrongPool = new AudioPool('assets/sound_wrong.mp3', 5);
+
     function playSoundHit() {
-        const s = soundHit.cloneNode();
-        s.play();
+        soundHitPool.play();
     }
     function playSoundScore() {
-        const s = soundScore.cloneNode();
-        s.play();
+        soundScorePool.play();
     }
     function playSoundWrong() {
-        const s = soundWrong.cloneNode();
-        s.play();
+        soundWrongPool.play();
+    }
+
+    // Enable audio on first user interaction (required for mobile)
+    let audioEnabled = false;
+    function enableAudio() {
+        if (!audioEnabled) {
+            // Try to play a silent sound to unlock audio context
+            soundHitPool.pool[0].volume = 0;
+            soundHitPool.pool[0].play().then(() => {
+                soundHitPool.pool[0].volume = 0.7;
+                audioEnabled = true;
+            }).catch(() => {
+                // Audio still locked, will try again on next interaction
+            });
+        }
     }
 
     // Calculate difficulty progression
@@ -220,6 +277,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     gameBoard.addEventListener('click', (e) => {
         if (!gameActive) return;
+        
+        // Enable audio on first interaction (mobile requirement)
+        enableAudio();
+        
         clearTimeout(hammerTimeout);
         
         // Get position relative to game board
@@ -284,6 +345,10 @@ document.addEventListener('DOMContentLoaded', () => {
         startBtn.style.zIndex = '100';
         startBtn.addEventListener('click', () => {
             console.log('Start Game button clicked');
+            
+            // Enable audio on first interaction (mobile requirement)
+            enableAudio();
+            
             if (startBtn) startBtn.style.display = 'none';
             if (restartBtn) restartBtn.style.display = 'none';
             if (hammer) hammer.style.display = 'none';
@@ -293,6 +358,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (restartBtn) {
         restartBtn.addEventListener('click', () => {
+            // Enable audio on interaction (mobile requirement)
+            enableAudio();
+            
             if (restartBtn) restartBtn.style.display = 'none';
             if (startBtn) startBtn.style.display = 'none';
             if (hammer) hammer.style.display = 'none';
