@@ -33,9 +33,9 @@ document.addEventListener('DOMContentLoaded', () => {
             this.currentIndex = 0;
             this.poolSize = poolSize;
             this.lastPlayTime = 0;
-            this.minInterval = 50; // Minimum 50ms between same sound type
+            this.minInterval = 30; // Reduced to 30ms for faster hit sound response
             this.playingCount = 0;
-            this.maxSimultaneous = 2; // Max 2 instances playing simultaneously
+            this.maxSimultaneous = Math.min(poolSize, 4); // Allow more simultaneous for hit sounds
             
             // Create smaller pool for mobile
             for (let i = 0; i < poolSize; i++) {
@@ -102,16 +102,19 @@ document.addEventListener('DOMContentLoaded', () => {
     let audioQueue = [];
     const AUDIO_COOLDOWN = 100; // 100ms cooldown between any sounds
     
-    // Create smaller, throttled audio pools
-    const soundHitPool = new ThrottledAudioPool('assets/sound_hit1.ogg', 2);
-    const soundScorePool = new ThrottledAudioPool('assets/sound_score.ogg', 2);
-    const soundWrongPool = new ThrottledAudioPool('assets/sound_wrong.mp3', 2);
+    // Create audio pools - more hit sounds for rapid tapping
+    const soundHitPool = new ThrottledAudioPool('assets/sound_hit1.ogg', 8);  // 8 instances for rapid hits
+    const soundScorePool = new ThrottledAudioPool('assets/sound_score.ogg', 2);  // Smaller for desktop only
+    const soundWrongPool = new ThrottledAudioPool('assets/sound_wrong.mp3', 2); // Smaller for desktop only
 
-    function playThrottledSound(soundPool) {
+    function playThrottledSound(soundPool, isHitSound = false) {
         const now = Date.now();
         
+        // Different throttling for hit sounds vs others
+        const cooldown = isHitSound ? 40 : AUDIO_COOLDOWN; // Hit sounds can be faster
+        
         // Global audio throttling - prevent audio spam
-        if (now - lastAudioTime < AUDIO_COOLDOWN) {
+        if (now - lastAudioTime < cooldown) {
             return; // Skip this sound to prevent lag
         }
         
@@ -123,12 +126,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 768;
 
     function playSoundHit() {
-        if (isMobile) {
-            // Only play hit sound on mobile for essential feedback
-            playThrottledSound(soundHitPool);
-        } else {
-            playThrottledSound(soundHitPool);
-        }
+        // Play hit sound with faster response time
+        playThrottledSound(soundHitPool, true); // true = isHitSound
     }
     function playSoundScore() {
         if (!isMobile) {
