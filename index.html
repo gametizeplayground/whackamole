@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hit the Mole</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <header>
+        <h1 class="game-title">HIT THE FRUITS</h1>
+        <div class="top-bar">
+            <div class="top-bar-row">
+                <span id="high-score">HIGH SCORE 0</span>
+                <span id="timer">30s</span>
+            </div>
+            <div class="top-bar-row score-row">
+                <span id="score">SCORE 0</span>
+            </div>
+        </div>
+    </header>
+    <main>
+        <div class="game-board">
+            <!-- 3x3 grid of holes and moles -->
+            <div class="hole" data-index="0"><div class="mole" data-index="0"></div></div>
+            <div class="hole" data-index="1"><div class="mole" data-index="1"></div></div>
+            <div class="hole" data-index="2"><div class="mole" data-index="2"></div></div>
+            <div class="hole" data-index="3"><div class="mole" data-index="3"></div></div>
+            <div class="hole" data-index="4"><div class="mole" data-index="4"></div></div>
+            <div class="hole" data-index="5"><div class="mole" data-index="5"></div></div>
+            <div class="hole" data-index="6"><div class="mole" data-index="6"></div></div>
+            <div class="hole" data-index="7"><div class="mole" data-index="7"></div></div>
+            <div class="hole" data-index="8"><div class="mole" data-index="8"></div></div>
+            <!-- Hammer element for visual effect -->
+            <img id="hammer" src="assets/hammer.webp" alt="Hammer" style="position: absolute; display: none; pointer-events: none; z-index: 1000; width: 60px; height: 60px; transform: translate(-50%, -50%);">
+        </div>
+        <div class="button-area">
+            <button id="start-btn" class="game-btn">Start Game</button>
+            <button id="restart-btn" class="game-btn" style="display:none;">Whack Again</button>
+        </div>
+        <div id="game-over" class="game-over" style="display:none;">
+            <span id="game-over-message">Game Over! Final Score: <span id="final-score">0</span></span>
+        </div>
+    </main>
+    <script src="script.js"></script>
+</body>
+</html> 
