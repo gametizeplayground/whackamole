@@ -35,7 +35,7 @@ document.addEventListener('DOMContentLoaded', () => {
             this.lastPlayTime = 0;
             this.minInterval = 30; // Reduced to 30ms for faster hit sound response
             this.playingCount = 0;
-            this.maxSimultaneous = Math.min(poolSize, 4); // Allow more simultaneous for hit sounds
+            this.maxSimultaneous = Math.min(poolSize, 8); // Allow more simultaneous for hit sounds on mobile
             
             // Create smaller pool for mobile
             for (let i = 0; i < poolSize; i++) {
@@ -103,7 +103,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const AUDIO_COOLDOWN = 100; // 100ms cooldown between any sounds
     
     // Create audio pools - more hit sounds for rapid tapping
-    const soundHitPool = new ThrottledAudioPool('assets/sound_hit1.ogg', 8);  // 8 instances for rapid hits
+    const soundHitPool = new ThrottledAudioPool('assets/sound_hit1.ogg', 16);  // 16 instances for ultra-smooth rapid hits on mobile
     const soundScorePool = new ThrottledAudioPool('assets/sound_score.ogg', 2);  // Smaller for desktop only
     const soundWrongPool = new ThrottledAudioPool('assets/sound_wrong.mp3', 2); // Smaller for desktop only
 
