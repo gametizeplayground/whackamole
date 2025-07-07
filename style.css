@@ -249,8 +249,8 @@ footer, .score-board {
     .game-board {
         grid-template-columns: repeat(3, 85px);
         grid-template-rows: repeat(3, 85px);
-        margin-left: 0px;
-        margin-top: -20px;
+        margin-left: -10px;
+        margin-top: -25px;
         margin-bottom: 5px;
         gap: 8px;
     }
@@ -265,12 +265,12 @@ footer, .score-board {
         font-size: 1.8rem;
     }
     .hole {
-        width: 85px;
-        height: 100px;
+        width: 100px;
+        height: 110px;
     }
     .hole::before {
-        width: 65px;
-        height: 20px;
+        width: 80px;
+        height: 30px;
     }
     .mole {
         width: 65px;
@@ -283,7 +283,7 @@ footer, .score-board {
         padding: 1px 4px;
     }
     .button-area {
-        bottom: 80px !important;
+        bottom: 50px !important;
     }
     .game-btn {
         font-size: 1.1rem;
