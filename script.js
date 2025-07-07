@@ -36,16 +36,21 @@ document.addEventListener('DOMContentLoaded', () => {
             this.currentIndex = 0;
             this.poolSize = poolSize;
             this.lastPlayTime = 0;
-            // Different settings for desktop vs mobile
-            this.minInterval = isMobile ? 100 : 50; // Less aggressive throttling on desktop
+            // Different settings for desktop vs mobile - reduced throttling for better mobile response
+            this.minInterval = isMobile ? 30 : 25; // Much faster response on mobile
             this.playingCount = 0;
-            this.maxSimultaneous = isMobile ? Math.min(poolSize, 4) : Math.min(poolSize, 8);
+            this.maxSimultaneous = isMobile ? Math.min(poolSize, 12) : Math.min(poolSize, 16);
             
-            // Create audio pool
+            // Create audio pool with improved mobile preloading
             for (let i = 0; i < poolSize; i++) {
                 const audio = new Audio(src);
                 audio.preload = 'auto';
-                audio.volume = 0.8; // Higher volume for better desktop experience
+                audio.volume = isMobile ? 0.7 : 0.8; // Slightly lower volume on mobile to prevent distortion
+                
+                // Aggressive preloading for mobile
+                if (isMobile) {
+                    audio.load(); // Force loading on mobile
+                }
                 
                 // Track when audio finishes
                 audio.addEventListener('ended', () => {
@@ -56,6 +61,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 audio.addEventListener('error', (e) => {
                     console.log('Audio error:', e);
                 });
+                
+                // Additional mobile-specific optimizations
+                if (isMobile) {
+                    audio.addEventListener('canplaythrough', () => {
+                        // Audio is ready to play
+                    });
+                }
                 
                 this.pool.push(audio);
             }
@@ -77,21 +89,36 @@ document.addEventListener('DOMContentLoaded', () => {
             try {
                 const audio = this.pool[this.currentIndex];
                 
-                // Stop current audio if playing to avoid overlap (only on mobile)
-                if (isMobile && !audio.paused) {
-                    audio.pause();
-                    this.playingCount = Math.max(0, this.playingCount - 1);
+                // Only reset if audio is not currently playing to avoid interruption lag on mobile
+                if (!audio.paused) {
+                    // Skip to next audio instance instead of stopping current one
+                    this.currentIndex = (this.currentIndex + 1) % this.poolSize;
+                    const nextAudio = this.pool[this.currentIndex];
+                    if (!nextAudio.paused) {
+                        // If next is also playing, find the first available one
+                        for (let i = 0; i < this.poolSize; i++) {
+                            const testIndex = (this.currentIndex + i) % this.poolSize;
+                            if (this.pool[testIndex].paused || this.pool[testIndex].ended) {
+                                this.currentIndex = testIndex;
+                                break;
+                            }
+                        }
+                    }
                 }
                 
-                audio.currentTime = 0;
+                const finalAudio = this.pool[this.currentIndex];
+                finalAudio.currentTime = 0;
                 
                 // Play with promise handling
-                const playPromise = audio.play();
+                const playPromise = finalAudio.play();
                 if (playPromise !== undefined) {
                     playPromise.then(() => {
                         this.playingCount++;
                     }).catch((error) => {
-                        console.log('Audio play failed:', error);
+                        // Silently fail on mobile to prevent console spam
+                        if (!isMobile) {
+                            console.log('Audio play failed:', error);
+                        }
                     });
                 } else {
                     this.playingCount++;
@@ -101,52 +128,85 @@ document.addEventListener('DOMContentLoaded', () => {
                 this.currentIndex = (this.currentIndex + 1) % this.poolSize;
                 
             } catch (error) {
-                console.log('Audio error:', error);
+                if (!isMobile) {
+                    console.log('Audio error:', error);
+                }
             }
         }
     }
+    
+    // Create audio pools - increased instances for better mobile performance
+    const soundHitPool = new ThrottledAudioPool('assets/sound_hit1.ogg', isMobile ? 20 : 24);
+    const soundScorePool = new ThrottledAudioPool('assets/sound_score.ogg', isMobile ? 6 : 8);
+    const soundWrongPool = new ThrottledAudioPool('assets/sound_wrong.mp3', isMobile ? 6 : 8);
 
-    // Create audio pools - more instances for desktop
-    const soundHitPool = new ThrottledAudioPool('assets/sound_hit1.ogg', isMobile ? 8 : 16);
-    const soundScorePool = new ThrottledAudioPool('assets/sound_score.ogg', 3);
-    const soundWrongPool = new ThrottledAudioPool('assets/sound_wrong.mp3', 3);
-
-    // Audio enabling - improved for desktop
+    // Audio enabling - optimized for mobile and desktop
     let audioEnabled = false;
     function enableAudio() {
         if (!audioEnabled) {
-            // For desktop, try to initialize audio more aggressively
-            const testAudio = soundHitPool.pool[0];
-            const originalVolume = testAudio.volume;
-            
-            // Try to play a very quiet sound to unlock audio context
-            testAudio.volume = 0.01;
-            const playPromise = testAudio.play();
-            
-            if (playPromise !== undefined) {
-                playPromise.then(() => {
-                    testAudio.pause();
-                    testAudio.currentTime = 0;
-                    testAudio.volume = originalVolume;
+            // Different strategies for mobile vs desktop
+            if (isMobile) {
+                // Mobile: Try to unlock multiple audio instances
+                const unlockPromises = [];
+                for (let i = 0; i < Math.min(3, soundHitPool.pool.length); i++) {
+                    const testAudio = soundHitPool.pool[i];
+                    const originalVolume = testAudio.volume;
+                    testAudio.volume = 0.01;
+                    
+                    const playPromise = testAudio.play();
+                    if (playPromise !== undefined) {
+                        unlockPromises.push(
+                            playPromise.then(() => {
+                                testAudio.pause();
+                                testAudio.currentTime = 0;
+                                testAudio.volume = originalVolume;
+                            }).catch(() => {
+                                testAudio.volume = originalVolume;
+                            })
+                        );
+                    } else {
+                        testAudio.volume = originalVolume;
+                    }
+                }
+                
+                Promise.all(unlockPromises).then(() => {
                     audioEnabled = true;
-                    console.log('Audio enabled successfully');
-                }).catch((error) => {
-                    console.log('Audio unlock failed:', error);
-                    testAudio.volume = originalVolume;
+                    console.log('Mobile audio enabled successfully');
+                }).catch(() => {
+                    console.log('Mobile audio unlock failed, will retry on next interaction');
                 });
             } else {
-                testAudio.volume = originalVolume;
-                audioEnabled = true;
+                // Desktop: Single audio unlock
+                const testAudio = soundHitPool.pool[0];
+                const originalVolume = testAudio.volume;
+                
+                testAudio.volume = 0.01;
+                const playPromise = testAudio.play();
+                
+                if (playPromise !== undefined) {
+                    playPromise.then(() => {
+                        testAudio.pause();
+                        testAudio.currentTime = 0;
+                        testAudio.volume = originalVolume;
+                        audioEnabled = true;
+                        console.log('Desktop audio enabled successfully');
+                    }).catch((error) => {
+                        console.log('Audio unlock failed:', error);
+                        testAudio.volume = originalVolume;
+                    });
+                } else {
+                    testAudio.volume = originalVolume;
+                    audioEnabled = true;
+                }
             }
         }
     }
 
-    // Sound functions with better desktop support
+    // Sound functions with better mobile and desktop support
     function playSoundHit() {
         if (!audioEnabled) {
             enableAudio(); // Try to enable audio if not already enabled
         }
-        console.log('Playing hit sound, audioEnabled:', audioEnabled);
         soundHitPool.play();
     }
 
@@ -160,7 +220,7 @@ document.addEventListener('DOMContentLoaded', () => {
             soundScorePool.pool.forEach(audio => audio.volume = 0.4);
         }
         soundScorePool.play();
-    }
+        }
 
     function playSoundWrong() {
         if (!audioEnabled) {
@@ -354,7 +414,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Enable audio on first interaction and ensure hit sound plays
         if (!audioEnabled) {
-            enableAudio();
+        enableAudio();
         }
         
         clearTimeout(hammerTimeout);
@@ -430,10 +490,10 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // Small delay to ensure audio context is ready
             setTimeout(() => {
-                if (startBtn) startBtn.style.display = 'none';
-                if (restartBtn) restartBtn.style.display = 'none';
-                if (hammer) hammer.style.display = 'none';
-                startGame();
+            if (startBtn) startBtn.style.display = 'none';
+            if (restartBtn) restartBtn.style.display = 'none';
+            if (hammer) hammer.style.display = 'none';
+            startGame();
             }, 100);
         });
     }
@@ -445,10 +505,10 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // Small delay to ensure audio context is ready
             setTimeout(() => {
-                if (restartBtn) restartBtn.style.display = 'none';
-                if (startBtn) startBtn.style.display = 'none';
-                if (hammer) hammer.style.display = 'none';
-                startGame();
+            if (restartBtn) restartBtn.style.display = 'none';
+            if (startBtn) startBtn.style.display = 'none';
+            if (hammer) hammer.style.display = 'none';
+            startGame();
             }, 100);
         });
     }
