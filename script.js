@@ -26,26 +26,35 @@ document.addEventListener('DOMContentLoaded', () => {
     const fruits = ['Apple', 'Banana', 'Orange', 'Grape', 'Mango', 'Peach', 'Cherry', 'Lemon', 'Kiwi', 'Pear'];
     const nonFruits = ['Car', 'Book', 'Chair', 'Phone', 'Rock', 'Ball', 'Cup', 'Hat', 'Key', 'Pen'];
 
-    // Sound effects - Mobile optimized with aggressive throttling
+    // Mobile detection
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 768;
+
+    // Sound effects - Improved desktop/mobile handling
     class ThrottledAudioPool {
         constructor(src, poolSize = 3) {
             this.pool = [];
             this.currentIndex = 0;
             this.poolSize = poolSize;
             this.lastPlayTime = 0;
-            this.minInterval = 30; // Reduced to 30ms for faster hit sound response
+            // Different settings for desktop vs mobile
+            this.minInterval = isMobile ? 100 : 50; // Less aggressive throttling on desktop
             this.playingCount = 0;
-            this.maxSimultaneous = Math.min(poolSize, 8); // Allow more simultaneous for hit sounds on mobile
+            this.maxSimultaneous = isMobile ? Math.min(poolSize, 4) : Math.min(poolSize, 8);
             
-            // Create smaller pool for mobile
+            // Create audio pool
             for (let i = 0; i < poolSize; i++) {
                 const audio = new Audio(src);
                 audio.preload = 'auto';
-                audio.volume = 0.6; // Lower volume for mobile
+                audio.volume = 0.8; // Higher volume for better desktop experience
                 
                 // Track when audio finishes
                 audio.addEventListener('ended', () => {
                     this.playingCount = Math.max(0, this.playingCount - 1);
+                });
+                
+                // Add error handling
+                audio.addEventListener('error', (e) => {
+                    console.log('Audio error:', e);
                 });
                 
                 this.pool.push(audio);
@@ -55,7 +64,7 @@ document.addEventListener('DOMContentLoaded', () => {
         play() {
             const now = Date.now();
             
-            // Throttle: Don't play if too soon after last play
+            // Less aggressive throttling for desktop
             if (now - this.lastPlayTime < this.minInterval) {
                 return;
             }
@@ -68,8 +77,8 @@ document.addEventListener('DOMContentLoaded', () => {
             try {
                 const audio = this.pool[this.currentIndex];
                 
-                // Stop current audio if playing to avoid overlap
-                if (!audio.paused) {
+                // Stop current audio if playing to avoid overlap (only on mobile)
+                if (isMobile && !audio.paused) {
                     audio.pause();
                     this.playingCount = Math.max(0, this.playingCount - 1);
                 }
@@ -81,8 +90,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (playPromise !== undefined) {
                     playPromise.then(() => {
                         this.playingCount++;
-                    }).catch(() => {
-                        // Audio blocked, ignore
+                    }).catch((error) => {
+                        console.log('Audio play failed:', error);
                     });
                 } else {
                     this.playingCount++;
@@ -92,71 +101,77 @@ document.addEventListener('DOMContentLoaded', () => {
                 this.currentIndex = (this.currentIndex + 1) % this.poolSize;
                 
             } catch (error) {
-                // Ignore audio errors on mobile
+                console.log('Audio error:', error);
             }
         }
     }
 
-    // Audio throttling system
-    let lastAudioTime = 0;
-    let audioQueue = [];
-    const AUDIO_COOLDOWN = 100; // 100ms cooldown between any sounds
-    
-    // Create audio pools - more hit sounds for rapid tapping
-    const soundHitPool = new ThrottledAudioPool('assets/sound_hit1.ogg', 16);  // 16 instances for ultra-smooth rapid hits on mobile
-    const soundScorePool = new ThrottledAudioPool('assets/sound_score.ogg', 2);  // Smaller for desktop only
-    const soundWrongPool = new ThrottledAudioPool('assets/sound_wrong.mp3', 2); // Smaller for desktop only
+    // Create audio pools - more instances for desktop
+    const soundHitPool = new ThrottledAudioPool('assets/sound_hit1.ogg', isMobile ? 8 : 16);
+    const soundScorePool = new ThrottledAudioPool('assets/sound_score.ogg', 3);
+    const soundWrongPool = new ThrottledAudioPool('assets/sound_wrong.mp3', 3);
 
-    function playThrottledSound(soundPool, isHitSound = false) {
-        const now = Date.now();
-        
-        // Different throttling for hit sounds vs others
-        const cooldown = isHitSound ? 40 : AUDIO_COOLDOWN; // Hit sounds can be faster
-        
-        // Global audio throttling - prevent audio spam
-        if (now - lastAudioTime < cooldown) {
-            return; // Skip this sound to prevent lag
-        }
-        
-        soundPool.play();
-        lastAudioTime = now;
-    }
-
-    // Mobile detection
-    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 768;
-
-    function playSoundHit() {
-        // Play hit sound with faster response time
-        playThrottledSound(soundHitPool, true); // true = isHitSound
-    }
-    function playSoundScore() {
-        if (!isMobile) {
-            // Disable score sound on mobile to prevent lag
-            playThrottledSound(soundScorePool);
-        }
-        // Silent on mobile
-    }
-    function playSoundWrong() {
-        if (!isMobile) {
-            // Disable wrong sound on mobile to prevent lag
-            playThrottledSound(soundWrongPool);
-        }
-        // Silent on mobile
-    }
-
-    // Enable audio on first user interaction (required for mobile)
+    // Audio enabling - improved for desktop
     let audioEnabled = false;
     function enableAudio() {
         if (!audioEnabled) {
-            // Try to play a silent sound to unlock audio context
-            soundHitPool.pool[0].volume = 0;
-            soundHitPool.pool[0].play().then(() => {
-                soundHitPool.pool[0].volume = 0.7;
+            // For desktop, try to initialize audio more aggressively
+            const testAudio = soundHitPool.pool[0];
+            const originalVolume = testAudio.volume;
+            
+            // Try to play a very quiet sound to unlock audio context
+            testAudio.volume = 0.01;
+            const playPromise = testAudio.play();
+            
+            if (playPromise !== undefined) {
+                playPromise.then(() => {
+                    testAudio.pause();
+                    testAudio.currentTime = 0;
+                    testAudio.volume = originalVolume;
+                    audioEnabled = true;
+                    console.log('Audio enabled successfully');
+                }).catch((error) => {
+                    console.log('Audio unlock failed:', error);
+                    testAudio.volume = originalVolume;
+                });
+            } else {
+                testAudio.volume = originalVolume;
                 audioEnabled = true;
-            }).catch(() => {
-                // Audio still locked, will try again on next interaction
-            });
+            }
         }
+    }
+
+    // Sound functions with better desktop support
+    function playSoundHit() {
+        if (!audioEnabled) {
+            enableAudio(); // Try to enable audio if not already enabled
+        }
+        console.log('Playing hit sound, audioEnabled:', audioEnabled);
+        soundHitPool.play();
+    }
+
+    function playSoundScore() {
+        if (!audioEnabled) {
+            enableAudio();
+        }
+        // Play on both mobile and desktop, but with different volume
+        if (isMobile) {
+            // Lower volume on mobile
+            soundScorePool.pool.forEach(audio => audio.volume = 0.4);
+        }
+        soundScorePool.play();
+    }
+
+    function playSoundWrong() {
+        if (!audioEnabled) {
+            enableAudio();
+        }
+        // Play on both mobile and desktop
+        if (isMobile) {
+            // Lower volume on mobile
+            soundWrongPool.pool.forEach(audio => audio.volume = 0.4);
+        }
+        soundWrongPool.play();
     }
 
     // Calculate difficulty progression
@@ -193,11 +208,11 @@ document.addEventListener('DOMContentLoaded', () => {
         startSpawning();
     }
 
-    // Assign moledino image to each mole with label container
+    // Assign sloth image to each mole with label container
     moles.forEach((mole, i) => {
         mole.className = 'mole';
         mole.innerHTML = `
-            <img src="assets/moledino.webp" class="mole-img" alt="Mole Dino" draggable="false">
+            <img src="assets/sloth gets ready.png" class="mole-img" alt="Sloth Gets Ready" draggable="false">
             <div class="mole-label"></div>
         `;
     });
@@ -289,19 +304,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 if (moleData.isFruit) {
                     // Correct hit - fruit
-                    if (img) img.src = 'assets/moledino_dead.webp';
+                    if (img) img.src = 'assets/sloth got whacked.png';
                     showPointPopup(moles[idx], '+10', 'correct');
                     score += 10;
                     playSoundScore();
                     
                     // Hide mole after showing dead animation
                     setTimeout(() => { 
-                        if (img) img.src = 'assets/moledino.webp'; 
+                        if (img) img.src = 'assets/sloth gets ready.png'; 
                         moles[idx].classList.remove('show');
                     }, 500);
                 } else {
                     // Wrong hit - non-fruit
-                    if (img) img.src = 'assets/moledino_dead.webp';
+                    if (img) img.src = 'assets/sloth got whacked.png';
                     showPointPopup(moles[idx], '-3', 'wrong');
                     score -= 3;
                     if (score < 0) score = 0; // Don't go below 0
@@ -309,7 +324,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     
                     // Hide mole after showing wrong feedback
                     setTimeout(() => { 
-                        if (img) img.src = 'assets/moledino.webp';
+                        if (img) img.src = 'assets/sloth gets ready.png';
                         moles[idx].classList.remove('show');
                     }, 500);
                 }
@@ -337,8 +352,10 @@ document.addEventListener('DOMContentLoaded', () => {
     gameBoard.addEventListener('click', (e) => {
         if (!gameActive) return;
         
-        // Enable audio on first interaction (mobile requirement)
-        enableAudio();
+        // Enable audio on first interaction and ensure hit sound plays
+        if (!audioEnabled) {
+            enableAudio();
+        }
         
         clearTimeout(hammerTimeout);
         
@@ -351,7 +368,10 @@ document.addEventListener('DOMContentLoaded', () => {
         hammer.style.top = top + 'px';
         hammer.style.display = 'block';
         hammer.classList.add('click');
+        
+        // Play hit sound with improved reliability
         playSoundHit();
+        
         hammerTimeout = setTimeout(() => {
             hammer.classList.remove('click');
             hammer.style.display = 'none';
@@ -405,25 +425,31 @@ document.addEventListener('DOMContentLoaded', () => {
         startBtn.addEventListener('click', () => {
             console.log('Start Game button clicked');
             
-            // Enable audio on first interaction (mobile requirement)
+            // Enable audio immediately when starting game
             enableAudio();
             
-            if (startBtn) startBtn.style.display = 'none';
-            if (restartBtn) restartBtn.style.display = 'none';
-            if (hammer) hammer.style.display = 'none';
-            startGame();
+            // Small delay to ensure audio context is ready
+            setTimeout(() => {
+                if (startBtn) startBtn.style.display = 'none';
+                if (restartBtn) restartBtn.style.display = 'none';
+                if (hammer) hammer.style.display = 'none';
+                startGame();
+            }, 100);
         });
     }
 
     if (restartBtn) {
         restartBtn.addEventListener('click', () => {
-            // Enable audio on interaction (mobile requirement)
+            // Enable audio on interaction
             enableAudio();
             
-            if (restartBtn) restartBtn.style.display = 'none';
-            if (startBtn) startBtn.style.display = 'none';
-            if (hammer) hammer.style.display = 'none';
-            startGame();
+            // Small delay to ensure audio context is ready
+            setTimeout(() => {
+                if (restartBtn) restartBtn.style.display = 'none';
+                if (startBtn) startBtn.style.display = 'none';
+                if (hammer) hammer.style.display = 'none';
+                startGame();
+            }, 100);
         });
     }
 
